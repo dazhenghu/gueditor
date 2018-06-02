@@ -4,6 +4,7 @@ import (
     "runtime"
     "errors"
     "path/filepath"
+    "os"
 )
 
 var currDir string
@@ -42,4 +43,21 @@ func getDefaultConfigFile() (cnfFilePath string, err error)  {
 
     cnfFilePath = filepath.Join(dirPath, "config.json")
     return
+}
+
+/**
+判断对应路径是否存在
+ */
+func pathExists(path string) (bool, error)  {
+    // 获取path的信息
+    _, err := os.Stat(path)
+    if err == nil {
+        return true, nil
+    }
+
+    if os.IsNotExist(err) {
+        return false, nil
+    }
+
+    return false, err
 }
