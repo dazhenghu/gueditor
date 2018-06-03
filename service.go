@@ -12,6 +12,7 @@ const (
 )
 
 type Service struct {
+    rootPath string // 项目根目录
     uploader UploaderInterface
 }
 
@@ -28,6 +29,7 @@ func NewService(uploaderObj UploaderInterface, listObj ListInterface, rootPath s
     listObj.SetRootPath(rootPath)
 
     serv = &Service{
+        rootPath:rootPath,
         uploader:uploaderObj,
     }
 
@@ -154,7 +156,7 @@ func (serv *Service) Config() (cnf *Config) {
 /**
 获取图片列表
  */
-func (serv *Service) ListImage(rootPath string, listFileItem *ListFileItem, start int, size int)  {
+func (serv *Service) ListImage(listFileItem *ListFileItem, start int, size int)  {
     listParams := &ListParams{
         AllowFiles: GloabConfig.ImageManagerAllowFiles,
         ListSize: GloabConfig.ImageManagerListSize,
@@ -162,12 +164,11 @@ func (serv *Service) ListImage(rootPath string, listFileItem *ListFileItem, star
     }
 
     list := &List{
-        RootPath: rootPath,
+        RootPath: serv.rootPath,
         Params: listParams,
     }
 
-    fileList := make([]*FileItem, 0)
-    list.GetFileList(fileList, start, size)
+    fileList, _ := list.GetFileList(start, size)
     if len(fileList) > 0 {
         listFileItem.State = SUCCESS
         listFileItem.List = fileList
@@ -184,7 +185,7 @@ func (serv *Service) ListImage(rootPath string, listFileItem *ListFileItem, star
 /**
 获取文件列表
  */
-func (serv *Service) Listfile(rootPath string, listFileItem *ListFileItem, start int, size int)  {
+func (serv *Service) Listfile(listFileItem *ListFileItem, start int, size int)  {
     listParams := &ListParams{
         AllowFiles: GloabConfig.FileManagerAllowFiles,
         ListSize: GloabConfig.FileManagerListSize,
@@ -192,12 +193,11 @@ func (serv *Service) Listfile(rootPath string, listFileItem *ListFileItem, start
     }
 
     list := &List{
-        RootPath: rootPath,
+        RootPath: serv.rootPath,
         Params: listParams,
     }
 
-    fileList := make([]*FileItem, 0)
-    list.GetFileList(fileList, start, size)
+    fileList, _ := list.GetFileList(start, size)
     if len(fileList) > 0 {
         listFileItem.State = SUCCESS
         listFileItem.List = fileList
