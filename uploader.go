@@ -46,53 +46,59 @@ const (
 type UploaderParams struct {
     PathFormat string   /* 上传保存路径,可以自定义保存路径和文件名格式 */
     MaxSize    int      /* 上传大小限制，单位B */
-    FllowFiles []string /* 上传格式限制 */
+    AllowFiles []string /* 上传格式限制 */
     OriName    string   /* 原始文件名 */
 }
 
 type UploaderInterface interface {
     UpFile(file multipart.File, handle *multipart.FileHeader) error //上传文件的方法
-    UpBase64(fileName, base64data string) error            //处理base64编码的图片上传
-    SaveRemote(remoteUrl string) error            // 拉取远程图片
+    UpBase64(fileName, base64data string) error                     //处理base64编码的图片上传
+    SaveRemote(remoteUrl string) error                              // 拉取远程图片
+    SetParams(params *UploaderParams) error                         // 设置参数信息
 }
 
-type uploader struct {
+type Uploader struct {
     params *UploaderParams
 }
 
 /**
 新建uploader
  */
-func NewUploader(upParams *UploaderParams) *uploader {
-    return &uploader{
-        params:upParams,
-    }
+func NewUploader(upParams *UploaderParams) *Uploader {
+    uploaderObj := &Uploader{}
+    uploaderObj.SetParams(upParams)
+    return uploaderObj
+}
+
+func (up *Uploader) SetParams(params *UploaderParams) (err error)  {
+    up.params = params
+    return
 }
 
 /**
 上传文件
  */
-func (up *uploader) UpFile(file multipart.File, handle *multipart.FileHeader) (err error)  {
-    if file == nil || handle == nil {
+func (up *Uploader) UpFile(file multipart.File, fileHeader *multipart.FileHeader) (err error)  {
+    if file == nil || fileHeader == nil {
         // 上传文件为空
         err = errors.New(UPLOAD_FILE_IS_EMPTY)
         return
     }
 
     // 校验文件大小
-    err = up.checkSize(handle.Size)
+    err = up.checkSize(fileHeader.Size)
     if err != nil {
         return
     }
 
     // 校验文件类型
-    ext := filepath.Ext(handle.Filename)
+    ext := filepath.Ext(fileHeader.Filename)
     err = up.checkType(ext)
     if err != nil {
         return
     }
 
-    fullName := up.getFullName(handle.Filename)
+    fullName := up.getFullName(fileHeader.Filename)
     fileDir  := filepath.Dir(fullName)
     exists, err := pathExists(fileDir)
     if err != nil {
@@ -129,7 +135,7 @@ func (up *uploader) UpFile(file multipart.File, handle *multipart.FileHeader) (e
 /**
 删除base64数据文件
  */
-func (up *uploader) UpBase64(fileName, base64data string) (err error)  {
+func (up *Uploader) UpBase64(fileName, base64data string) (err error)  {
     imgData, err := base64.StdEncoding.DecodeString(base64data)
     if err != nil {
         err = errors.New(ERROR_BASE64_DATA)
@@ -177,7 +183,7 @@ func (up *uploader) UpBase64(fileName, base64data string) (err error)  {
 /**
 拉取远程文件并保存
  */
-func (up *uploader) SaveRemote(remoteUrl string) (err error) {
+func (up *Uploader) SaveRemote(remoteUrl string) (err error) {
     urlObj, err := url.Parse(remoteUrl)
     if err != nil {
         err = errors.New(INVALID_URL)
@@ -261,7 +267,7 @@ func (up *uploader) SaveRemote(remoteUrl string) (err error) {
 /**
 根据原始文件名生成新文件名
  */
-func (up *uploader) getFullName(oriName string) string {
+func (up *Uploader) getFullName(oriName string) string {
     timeNow := time.Now()
     timeNowFormat := time.Now().Format("2006_01_02_15_04_05")
     timeArr := strings.Split(timeNowFormat, "_")
@@ -286,7 +292,7 @@ func (up *uploader) getFullName(oriName string) string {
 /**
 校验文件大小
  */
-func (up *uploader) checkSize(fileSize int64) (err error) {
+func (up *Uploader) checkSize(fileSize int64) (err error) {
     if fileSize > int64(up.params.MaxSize) {
         err = errors.New(ERROR_SIZE_EXCEED)
         return
@@ -297,12 +303,12 @@ func (up *uploader) checkSize(fileSize int64) (err error) {
 /**
 校验文件类型
  */
-func (up *uploader) checkType(fileType string) (err error)  {
+func (up *Uploader) checkType(fileType string) (err error)  {
     isvalid := false
-    for _, fileTypeValid := range up.params.FllowFiles {
+    for _, fileTypeValid := range up.params.AllowFiles {
         if strings.ToLower(fileType) == fileTypeValid {
             isvalid = true
-            break;
+            break
         }
     }
 

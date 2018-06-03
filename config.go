@@ -3,7 +3,13 @@ package gueditor
 import (
     "io/ioutil"
     "encoding/json"
+    "errors"
+    "fmt"
 )
+
+func init()  {
+    loadDefaultConfig()
+}
 
 var GloabConfig *Config
 
@@ -59,6 +65,9 @@ type Config struct {
     FileManagerAllowFiles   []string `json:"fileManagerAllowFiles"`
 }
 
+/**
+加载默认配置
+ */
 func loadDefaultConfig() (err error) {
     filePath, err := getDefaultConfigFile()
     if err != nil {
@@ -72,4 +81,28 @@ func loadDefaultConfig() (err error) {
     if err != nil {
         return
     }
+
+    return
+}
+
+/**
+加载配置
+ */
+func loadConfigFromFile(filePath string) (err error) {
+    exists, err := pathExists(filePath)
+    if !exists {
+        err = errors.New(fmt.Sprintf("config file not exists:%s", filePath))
+        return
+    }
+
+    cnfJson, err := ioutil.ReadFile(filePath)
+    if err != nil {
+        return
+    }
+    err = json.Unmarshal(cnfJson, GloabConfig)
+    if err != nil {
+        return
+    }
+
+    return
 }
