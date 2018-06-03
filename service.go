@@ -72,6 +72,7 @@ func (serv *Service) UploadScrawl(r *http.Request) (res *ResFileInfoWithState, e
     data := r.PostFormValue(fieldName)
     serv.uploader.SetParams(params)
 
+    res = &ResFileInfoWithState{}
     fileInfo, err := serv.uploader.UpBase64(params.OriName, data)
     defer func() {
         r.Body.Close()
