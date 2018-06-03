@@ -8,6 +8,7 @@ import (
 )
 
 func init()  {
+    GloabConfig = &Config{}
     loadDefaultConfig()
 }
 
@@ -77,6 +78,7 @@ func loadDefaultConfig() (err error) {
     if err != nil {
         return
     }
+
     err = json.Unmarshal(cnfJson, GloabConfig)
     if err != nil {
         return
