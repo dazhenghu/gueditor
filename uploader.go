@@ -14,6 +14,8 @@ import (
     "errors"
     "net/http"
     "fmt"
+    "regexp"
+    "math/rand"
 )
 
 const (
@@ -344,6 +346,22 @@ func (up *Uploader) getFullName(oriName string) string {
 
     timestamp := strconv.FormatInt(timeNow.UnixNano(), 10)
     format = strings.Replace(format, "{time}", string(timestamp), 1)
+
+    pattern := "{rand:(\\d)+}"
+    if ok, _ := regexp.MatchString(pattern, format); ok {
+        // 生成随机字符串
+        exp, _ := regexp.Compile(pattern)
+        randLenStr := exp.FindSubmatch([]byte(format))
+
+        randLen, _ := strconv.Atoi(string(randLenStr[1]))
+        randStr := strconv.Itoa(rand.Int())
+        randStrLen := len(randStr)
+        if randStrLen > randLen {
+            randStr = randStr[randStrLen - randLen:]
+        }
+        // 将随机传替换到format中
+        format = exp.ReplaceAllString(format, randStr)
+    }
 
     ext := filepath.Ext(oriName)
 
