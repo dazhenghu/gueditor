@@ -16,8 +16,6 @@ import (
 )
 
 const (
-    SUCCESS                         string = "SUCCESS" //上传成功标记，在UEditor中内不可改变，否则flash判断会出错
-    ERROR                           string = "ERROR"
     BIGGER_THAN_UPLOAD_MAX_FILESIZE string = "文件大小超出 upload_max_filesize 限制"
     BIGGER_THAN_MAX_FILE_SIZE       string = "文件大小超出 MAX_FILE_SIZE 限制"
     FILE_NOT_COMPLETE               string = "文件未被完整上传"

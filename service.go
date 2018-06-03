@@ -2,8 +2,13 @@ package gueditor
 
 import (
     "net/http"
-    "encoding/json"
     "errors"
+)
+
+const (
+    SUCCESS string = "SUCCESS" //上传成功标记，在UEditor中内不可改变，否则flash判断会出错
+    ERROR   string = "ERROR"
+    NO_MATCH_FILE string = "no match file"
 )
 
 type service struct {
@@ -127,14 +132,14 @@ func (serv *service) uploadFile(r *http.Request, fieldName string, params *Uploa
 /**
 读取配置信息
  */
-func (serv *service) Config() ([]byte, error) {
-    return json.Marshal(GloabConfig)
+func (serv *service) Config() (cnf *Config) {
+    return GloabConfig
 }
 
 /**
 获取图片列表
  */
-func (serv *service) ListImage(rootPath string, fileList []*FileItem, start int, size int)  {
+func (serv *service) ListImage(rootPath string, listFileItem *ListFileItem, start int, size int)  {
     listParams := &ListParams{
         AllowFiles: GloabConfig.ImageManagerAllowFiles,
         ListSize: GloabConfig.ImageManagerListSize,
@@ -146,13 +151,25 @@ func (serv *service) ListImage(rootPath string, fileList []*FileItem, start int,
         Params: listParams,
     }
 
+    fileList := make([]*FileItem, 0)
     list.GetFileList(fileList, start, size)
+    if len(fileList) > 0 {
+        listFileItem.State = SUCCESS
+        listFileItem.List = fileList
+        listFileItem.Total = len(fileList)
+        listFileItem.Start = start
+    } else {
+        listFileItem.State = NO_MATCH_FILE
+        listFileItem.List = fileList
+        listFileItem.Total = 0
+        listFileItem.Start = start
+    }
 }
 
 /**
 获取文件列表
  */
-func (serv *service) Listfile(rootPath string, fileList []*FileItem, start int, size int)  {
+func (serv *service) Listfile(rootPath string, listFileItem *ListFileItem, start int, size int)  {
     listParams := &ListParams{
         AllowFiles: GloabConfig.FileManagerAllowFiles,
         ListSize: GloabConfig.FileManagerListSize,
@@ -164,7 +181,19 @@ func (serv *service) Listfile(rootPath string, fileList []*FileItem, start int, 
         Params: listParams,
     }
 
+    fileList := make([]*FileItem, 0)
     list.GetFileList(fileList, start, size)
+    if len(fileList) > 0 {
+        listFileItem.State = SUCCESS
+        listFileItem.List = fileList
+        listFileItem.Total = len(fileList)
+        listFileItem.Start = start
+    } else {
+        listFileItem.State = NO_MATCH_FILE
+        listFileItem.List = fileList
+        listFileItem.Total = 0
+        listFileItem.Start = start
+    }
 }
 
 /**

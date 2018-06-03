@@ -6,6 +6,13 @@ import (
     "strings"
 )
 
+type ListFileItem struct {
+    State string      `json:"state"`
+    List  []*FileItem `json:"list"`
+    Start int         `json:"start"`
+    Total int         `json:"total"`
+}
+
 type FileItem struct {
     Url string `json:"url"` // 文件url
     Mtime int64 `json:"mtime"` // 最后编辑时间
