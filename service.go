@@ -11,11 +11,11 @@ const (
     NO_MATCH_FILE string = "no match file"
 )
 
-type service struct {
+type Service struct {
     uploader UploaderInterface
 }
 
-func NewService(uploaderObj UploaderInterface, listObj ListInterface, rootPath string, configFilePath string) (serv *service, err error) {
+func NewService(uploaderObj UploaderInterface, listObj ListInterface, rootPath string, configFilePath string) (serv *Service, err error) {
     if uploaderObj == nil {
         // 没有注入uploader接口，则使用默认的方法
         uploaderObj = &Uploader{}
@@ -27,7 +27,7 @@ func NewService(uploaderObj UploaderInterface, listObj ListInterface, rootPath s
     }
     listObj.SetRootPath(rootPath)
 
-    serv = &service{
+    serv = &Service{
         uploader:uploaderObj,
     }
 
@@ -42,7 +42,7 @@ func NewService(uploaderObj UploaderInterface, listObj ListInterface, rootPath s
 /**
 上传图片
  */
-func (serv *service) Uploadimage(r *http.Request) (res *ResFileInfoWithState, err error) {
+func (serv *Service) Uploadimage(r *http.Request) (res *ResFileInfoWithState, err error) {
     params := &UploaderParams{
         PathFormat:GloabConfig.ImagePathFormat,
         MaxSize:GloabConfig.ImageMaxSize,
@@ -51,13 +51,16 @@ func (serv *service) Uploadimage(r *http.Request) (res *ResFileInfoWithState, er
 
     fieldName := GloabConfig.ImageFieldName
     res, err =  serv.uploadFile(r, fieldName, params)
+    defer func() {
+        r.Body.Close()
+    }()
     return
 }
 
 /**
 上传涂鸦
  */
-func (serv *service) UploadScrawl(r *http.Request) (res *ResFileInfoWithState, err error)  {
+func (serv *Service) UploadScrawl(r *http.Request) (res *ResFileInfoWithState, err error)  {
     params := &UploaderParams{
         PathFormat:GloabConfig.ScrawlPathFormat,
         MaxSize:GloabConfig.ScrawlMaxSize,
@@ -70,6 +73,9 @@ func (serv *service) UploadScrawl(r *http.Request) (res *ResFileInfoWithState, e
     serv.uploader.SetParams(params)
 
     fileInfo, err := serv.uploader.UpBase64(params.OriName, data)
+    defer func() {
+        r.Body.Close()
+    }()
     if err == nil {
         res.fromResFileInfo(fileInfo)
         res.State = SUCCESS
@@ -82,7 +88,7 @@ func (serv *service) UploadScrawl(r *http.Request) (res *ResFileInfoWithState, e
 /**
 上传视频
  */
-func (serv *service) UploadVideo(r *http.Request) (res *ResFileInfoWithState, err error) {
+func (serv *Service) UploadVideo(r *http.Request) (res *ResFileInfoWithState, err error) {
     params := &UploaderParams{
         PathFormat:GloabConfig.VideoPathFormat,
         MaxSize:GloabConfig.VideoMaxSize,
@@ -91,13 +97,16 @@ func (serv *service) UploadVideo(r *http.Request) (res *ResFileInfoWithState, er
 
     fieldName := GloabConfig.VideoFieldName
     res, err = serv.uploadFile(r, fieldName, params)
+    defer func() {
+        r.Body.Close()
+    }()
     return
 }
 
 /**
 上传文件
  */
-func (serv *service) UploadFile(r *http.Request) (res *ResFileInfoWithState, err error) {
+func (serv *Service) UploadFile(r *http.Request) (res *ResFileInfoWithState, err error) {
     params := &UploaderParams{
         PathFormat:GloabConfig.FilePathFormat,
         MaxSize:GloabConfig.FileMaxSize,
@@ -106,12 +115,15 @@ func (serv *service) UploadFile(r *http.Request) (res *ResFileInfoWithState, err
 
     fieldName := GloabConfig.FileFieldName
     res, err = serv.uploadFile(r, fieldName, params)
+    defer func() {
+        r.Body.Close()
+    }()
     return
 }
 
 
 
-func (serv *service) uploadFile(r *http.Request, fieldName string, params *UploaderParams) (fileInfo *ResFileInfoWithState, err error) {
+func (serv *Service) uploadFile(r *http.Request, fieldName string, params *UploaderParams) (fileInfo *ResFileInfoWithState, err error) {
     file, fileHeader, err := r.FormFile(fieldName)
     if err != nil {
         return
@@ -132,14 +144,14 @@ func (serv *service) uploadFile(r *http.Request, fieldName string, params *Uploa
 /**
 读取配置信息
  */
-func (serv *service) Config() (cnf *Config) {
+func (serv *Service) Config() (cnf *Config) {
     return GloabConfig
 }
 
 /**
 获取图片列表
  */
-func (serv *service) ListImage(rootPath string, listFileItem *ListFileItem, start int, size int)  {
+func (serv *Service) ListImage(rootPath string, listFileItem *ListFileItem, start int, size int)  {
     listParams := &ListParams{
         AllowFiles: GloabConfig.ImageManagerAllowFiles,
         ListSize: GloabConfig.ImageManagerListSize,
@@ -169,7 +181,7 @@ func (serv *service) ListImage(rootPath string, listFileItem *ListFileItem, star
 /**
 获取文件列表
  */
-func (serv *service) Listfile(rootPath string, listFileItem *ListFileItem, start int, size int)  {
+func (serv *Service) Listfile(rootPath string, listFileItem *ListFileItem, start int, size int)  {
     listParams := &ListParams{
         AllowFiles: GloabConfig.FileManagerAllowFiles,
         ListSize: GloabConfig.FileManagerListSize,
@@ -199,7 +211,7 @@ func (serv *service) Listfile(rootPath string, listFileItem *ListFileItem, start
 /**
 从远程拉取图片
  */
-func (serv *service) CatchImage(r *http.Request) (listRes *ResFilesInfoWithStates, err error) {
+func (serv *Service) CatchImage(r *http.Request) (listRes *ResFilesInfoWithStates, err error) {
     params := &UploaderParams{
         PathFormat:GloabConfig.CatcherPathFormat,
         MaxSize:GloabConfig.CatcherMaxSize,

@@ -42,6 +42,7 @@ func (l *List) SetParams(params *ListParams) error {
 
 func (l *List) SetRootPath(path string) error {
     l.RootPath = path
+    return nil
 }
 
 /**
