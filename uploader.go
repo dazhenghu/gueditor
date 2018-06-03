@@ -2,13 +2,17 @@ package gueditor
 
 import (
     "io"
-    "github.com/kataras/iris/core/errors"
     "mime/multipart"
     "os"
     "time"
     "strings"
     "strconv"
     "path/filepath"
+    "encoding/base64"
+    "io/ioutil"
+    "net/url"
+    "errors"
+    "net/http"
 )
 
 const (
@@ -33,6 +37,9 @@ const (
     ERROR_HTTP_CONTENTTYPE          string = "链接contentType不正确"
     INVALID_URL                     string = "非法 URL"
     INVALID_IP                      string = "非法 IP"
+    ERROR_BASE64_DATA               string = "base64图片解码错误"
+    ERROR_FILE_STATE                string = "文件系统错误"
+    ERRPR_READ_REMOTE_DATA          string = "读取远程链接出错"
 )
 
 // 上传文件的参数
@@ -44,9 +51,9 @@ type UploaderParams struct {
 }
 
 type UploaderInterface interface {
-    UpFile(src io.Reader) error //上传文件的方法
-    UpBase64() error            //处理base64编码的图片上传
-    UpRemote() error            // 拉取远程图片
+    UpFile(file multipart.File, handle *multipart.FileHeader) error //上传文件的方法
+    UpBase64(fileName, base64data string) error            //处理base64编码的图片上传
+    SaveRemote(remoteUrl string) error            // 拉取远程图片
 }
 
 type uploader struct {
@@ -89,18 +96,21 @@ func (up *uploader) UpFile(file multipart.File, handle *multipart.FileHeader) (e
     fileDir  := filepath.Dir(fullName)
     exists, err := pathExists(fileDir)
     if err != nil {
+        err = errors.New(ERROR_FILE_STATE)
         return
     }
 
     if !exists {
         // 文件夹不存在，创建
         if err = os.MkdirAll(fileDir, 0666); err != nil {
+            err = errors.New(ERROR_CREATE_DIR)
             return
         }
     }
 
     dstFile, err := os.OpenFile(fullName, os.O_WRONLY | os.O_RDONLY, 0666)
     if err != nil {
+        err = errors.New(ERROR_DIR_NOT_WRITEABLE)
         return
     }
     defer func() {
@@ -109,18 +119,143 @@ func (up *uploader) UpFile(file multipart.File, handle *multipart.FileHeader) (e
 
     _, err = io.Copy(dstFile, file)
     if err != nil {
+        err = errors.New(ERROR_WRITE_CONTENT)
         return
     }
 
     return
 }
 
-func (up *uploader) UpBase64() error  {
-    return nil
+/**
+删除base64数据文件
+ */
+func (up *uploader) UpBase64(fileName, base64data string) (err error)  {
+    imgData, err := base64.StdEncoding.DecodeString(base64data)
+    if err != nil {
+        err = errors.New(ERROR_BASE64_DATA)
+        return
+    }
+
+    fileSize := len(imgData)
+    // 校验文件大小
+    err = up.checkSize(int64(fileSize))
+    if err != nil {
+        return
+    }
+
+    ext := filepath.Ext(fileName)
+    err = up.checkType(ext)
+    if err != nil {
+        return
+    }
+
+    fullName := up.getFullName(fileName)
+    fileDir  := filepath.Dir(fullName)
+    exists, err := pathExists(fileDir)
+    if err != nil {
+        err = errors.New(ERROR_FILE_STATE)
+        return
+    }
+
+    if !exists {
+        // 文件夹不存在，创建
+        if err = os.MkdirAll(fileDir, 0666); err != nil {
+            err = errors.New(ERROR_CREATE_DIR)
+            return
+        }
+    }
+
+    err = ioutil.WriteFile(fullName, imgData, 0666)
+    if err != nil {
+        err = errors.New(ERROR_WRITE_CONTENT)
+        return
+    }
+
+    return
 }
 
-func (up *uploader) UpRemote() error  {
-    return nil
+/**
+拉取远程文件并保存
+ */
+func (up *uploader) SaveRemote(remoteUrl string) (err error) {
+    urlObj, err := url.Parse(remoteUrl)
+    if err != nil {
+        err = errors.New(INVALID_URL)
+        return
+    }
+
+    scheme := strings.ToLower(urlObj.Scheme)
+    if scheme != "http" && scheme != "https" {
+        err = errors.New(ERROR_HTTP_LINK)
+        return
+    }
+
+    // 校验文件类型
+    ext := filepath.Ext(urlObj.Path)
+    err = up.checkType(ext)
+    if err != nil {
+        return
+    }
+
+    fullName := up.getFullName(filepath.Base(urlObj.Path))
+    fileDir  := filepath.Dir(fullName)
+    exists, err := pathExists(fileDir)
+    if err != nil {
+        err = errors.New(ERROR_FILE_STATE)
+        return
+    }
+
+    if !exists {
+        // 文件夹不存在，创建
+        if err = os.MkdirAll(fileDir, 0666); err != nil {
+            err = errors.New(ERROR_CREATE_DIR)
+            return
+        }
+    }
+
+    client := http.Client{Timeout: 5 * time.Second}
+    // 校验是否是可用的链接
+    headResp, err := client.Head(remoteUrl)
+    if err == nil {
+        defer func() {
+            headResp.Body.Close()
+        }()
+    }
+    if err != nil || headResp.StatusCode != http.StatusOK {
+        err = errors.New(ERROR_DEAD_LINK)
+        return
+    }
+    // 校验content-type
+    contentType := headResp.Header.Get("Content-Type")
+    if !strings.Contains(strings.ToLower(contentType), "image") {
+        err = errors.New(ERROR_HTTP_CONTENTTYPE)
+        return
+    }
+
+    resp, err := client.Get(remoteUrl)
+    if err == nil {
+        defer func() {
+            resp.Body.Close()
+        }()
+    }
+    if err != nil || resp.StatusCode != http.StatusOK {
+        err = errors.New(ERROR_DEAD_LINK)
+        return
+    }
+
+    data, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        errors.New(ERRPR_READ_REMOTE_DATA)
+        return
+    }
+
+    err = ioutil.WriteFile(fullName, data, 0666)
+    if err != nil {
+        err = errors.New(ERROR_WRITE_CONTENT)
+        return
+    }
+
+    return
 }
 
 /**
