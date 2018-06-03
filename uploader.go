@@ -13,6 +13,7 @@ import (
     "net/url"
     "errors"
     "net/http"
+    "fmt"
 )
 
 const (
@@ -135,20 +136,24 @@ func (up *Uploader) UpFile(file multipart.File, fileHeader *multipart.FileHeader
     fileDir  := filepath.Dir(fileAbsPath)
     exists, err := pathExists(fileDir)
     if err != nil {
+        log(err)
         err = errors.New(ERROR_FILE_STATE)
         return
     }
 
     if !exists {
         // 文件夹不存在，创建
-        if err = os.MkdirAll(fileDir, 0666); err != nil {
+        if err = os.MkdirAll(fileDir, 0766); err != nil {
+            log(err)
             err = errors.New(ERROR_CREATE_DIR)
             return
         }
     }
 
-    dstFile, err := os.OpenFile(fileAbsPath, os.O_WRONLY | os.O_RDONLY, 0666)
+    dstFile, err := os.OpenFile(fileAbsPath, os.O_WRONLY | os.O_RDONLY | os.O_CREATE, 0666)
     if err != nil {
+        log(fmt.Sprintf("dstFile:%s\n", fileAbsPath))
+        log(fmt.Sprintf("dstFile err:%s\n", err.Error()))
         err = errors.New(ERROR_DIR_NOT_WRITEABLE)
         return
     }
@@ -161,6 +166,7 @@ func (up *Uploader) UpFile(file multipart.File, fileHeader *multipart.FileHeader
         err = errors.New(ERROR_WRITE_CONTENT)
         return
     }
+    fileInfo = &ResFileInfo{}
 
     fileInfo.Size = fileHeader.Size
     fileInfo.Type = ext
@@ -174,6 +180,7 @@ func (up *Uploader) UpFile(file multipart.File, fileHeader *multipart.FileHeader
 删除base64数据文件
  */
 func (up *Uploader) UpBase64(fileName, base64data string) (fileInfo *ResFileInfo, err error)  {
+
     imgData, err := base64.StdEncoding.DecodeString(base64data)
     if err != nil {
         err = errors.New(ERROR_BASE64_DATA)
@@ -204,7 +211,7 @@ func (up *Uploader) UpBase64(fileName, base64data string) (fileInfo *ResFileInfo
 
     if !exists {
         // 文件夹不存在，创建
-        if err = os.MkdirAll(fileDir, 0666); err != nil {
+        if err = os.MkdirAll(fileDir, 0766); err != nil {
             err = errors.New(ERROR_CREATE_DIR)
             return
         }
@@ -216,6 +223,7 @@ func (up *Uploader) UpBase64(fileName, base64data string) (fileInfo *ResFileInfo
         return
     }
 
+    fileInfo = &ResFileInfo{}
     fileInfo.Size = int64(fileSize)
     fileInfo.Type = ext
     fileInfo.Title = filepath.Base(fileAbsPath)
@@ -260,7 +268,7 @@ func (up *Uploader) SaveRemote(remoteUrl string) (fileInfo *ResFileInfo, err err
 
     if !exists {
         // 文件夹不存在，创建
-        if err = os.MkdirAll(fileDir, 0666); err != nil {
+        if err = os.MkdirAll(fileDir, 0766); err != nil {
             err = errors.New(ERROR_CREATE_DIR)
             return
         }
@@ -307,7 +315,7 @@ func (up *Uploader) SaveRemote(remoteUrl string) (fileInfo *ResFileInfo, err err
         err = errors.New(ERROR_WRITE_CONTENT)
         return
     }
-
+    fileInfo = &ResFileInfo{}
     fileInfo.Size = int64(len(data))
     fileInfo.Type = ext
     fileInfo.Title = filepath.Base(fileAbsPath)

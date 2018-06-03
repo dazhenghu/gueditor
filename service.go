@@ -129,6 +129,8 @@ func (serv *Service) uploadFile(r *http.Request, fieldName string, params *Uploa
         return
     }
 
+    fileInfo = &ResFileInfoWithState{}
+
     serv.uploader.SetParams(params)
 
     resFileInfo, err := serv.uploader.UpFile(file, fileHeader)
