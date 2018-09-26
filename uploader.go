@@ -1,9 +1,7 @@
 package gueditor
 
 import (
-    "io"
     "mime/multipart"
-    "os"
     "time"
     "strings"
     "strconv"
@@ -13,36 +11,13 @@ import (
     "net/url"
     "errors"
     "net/http"
-    "fmt"
     "regexp"
     "math/rand"
+    "github.com/dazhenghu/gueditor/common"
+    "github.com/dazhenghu/gueditor/storage"
 )
 
-const (
-    BIGGER_THAN_UPLOAD_MAX_FILESIZE string = "文件大小超出 upload_max_filesize 限制"
-    BIGGER_THAN_MAX_FILE_SIZE       string = "文件大小超出 MAX_FILE_SIZE 限制"
-    FILE_NOT_COMPLETE               string = "文件未被完整上传"
-    NO_FILE_UPLOAD                  string = "没有文件被上传"
-    UPLOAD_FILE_IS_EMPTY            string = "上传文件为空"
-    ERROR_TMP_FILE                  string = "临时文件错误"
-    ERROR_TMP_FILE_NOT_FOUND        string = "找不到临时文件"
-    ERROR_SIZE_EXCEED               string = "文件大小超出网站限制"
-    ERROR_TYPE_NOT_ALLOWED          string = "文件类型不允许"
-    ERROR_CREATE_DIR                string = "目录创建失败"
-    ERROR_DIR_NOT_WRITEABLE         string = "目录没有写权限"
-    ERROR_FILE_MOVE                 string = "文件保存时出错"
-    ERROR_FILE_NOT_FOUND            string = "找不到上传文件"
-    ERROR_WRITE_CONTENT             string = "写入文件内容错误"
-    ERROR_UNKNOWN                   string = "未知错误"
-    ERROR_DEAD_LINK                 string = "链接不可用"
-    ERROR_HTTP_LINK                 string = "链接不是http链接"
-    ERROR_HTTP_CONTENTTYPE          string = "链接contentType不正确"
-    INVALID_URL                     string = "非法 URL"
-    INVALID_IP                      string = "非法 IP"
-    ERROR_BASE64_DATA               string = "base64图片解码错误"
-    ERROR_FILE_STATE                string = "文件系统错误"
-    ERRPR_READ_REMOTE_DATA          string = "读取远程链接出错"
-)
+
 
 type ResFileInfo struct {
     URL      string `json:"url"`
@@ -84,11 +59,13 @@ type UploaderInterface interface {
     SaveRemote(remoteUrl string) (fileInfo *ResFileInfo, err error)                              // 拉取远程图片
     SetParams(params *UploaderParams) error                         // 设置参数信息
     SetRootPath(path string) error // 设置根目录
+    SetStorage(storageObj storage.BaseInterface) error // 设置文件存储的操作实例
 }
 
 type Uploader struct {
     RootPath string // 项目根目录
     params *UploaderParams
+    Storage storage.BaseInterface // 文件、图片保存的方法
 }
 
 /**
@@ -116,7 +93,7 @@ func (up *Uploader) SetRootPath(path string) error {
 func (up *Uploader) UpFile(file multipart.File, fileHeader *multipart.FileHeader) (fileInfo *ResFileInfo, err error)  {
     if file == nil || fileHeader == nil {
         // 上传文件为空
-        err = errors.New(UPLOAD_FILE_IS_EMPTY)
+        err = errors.New(common.UPLOAD_FILE_IS_EMPTY)
         return
     }
 
@@ -135,57 +112,30 @@ func (up *Uploader) UpFile(file multipart.File, fileHeader *multipart.FileHeader
 
     fullName := up.getFullName(fileHeader.Filename)
     fileAbsPath := up.getFilePath(fullName)
-    fileDir  := filepath.Dir(fileAbsPath)
-    exists, err := pathExists(fileDir)
+
+    fileUrl, err := up.Storage.SaveFile(file, fileHeader.Size, fileAbsPath, fullName)
     if err != nil {
-        log(err)
-        err = errors.New(ERROR_FILE_STATE)
         return
     }
 
-    if !exists {
-        // 文件夹不存在，创建
-        if err = os.MkdirAll(fileDir, 0766); err != nil {
-            log(err)
-            err = errors.New(ERROR_CREATE_DIR)
-            return
-        }
-    }
-
-    dstFile, err := os.OpenFile(fileAbsPath, os.O_WRONLY | os.O_RDONLY | os.O_CREATE, 0666)
-    if err != nil {
-        log(fmt.Sprintf("dstFile:%s\n", fileAbsPath))
-        log(fmt.Sprintf("dstFile err:%s\n", err.Error()))
-        err = errors.New(ERROR_DIR_NOT_WRITEABLE)
-        return
-    }
-    defer func() {
-        dstFile.Close()
-    }()
-
-    _, err = io.Copy(dstFile, file)
-    if err != nil {
-        err = errors.New(ERROR_WRITE_CONTENT)
-        return
-    }
     fileInfo = &ResFileInfo{}
 
     fileInfo.Size = fileHeader.Size
     fileInfo.Type = ext
     fileInfo.Title = filepath.Base(fileAbsPath)
     fileInfo.Original = fileHeader.Filename
-    fileInfo.URL = fullName
+    fileInfo.URL = fileUrl
     return
 }
 
 /**
-删除base64数据文件
+上传base64数据文件
  */
 func (up *Uploader) UpBase64(fileName, base64data string) (fileInfo *ResFileInfo, err error)  {
 
     imgData, err := base64.StdEncoding.DecodeString(base64data)
     if err != nil {
-        err = errors.New(ERROR_BASE64_DATA)
+        err = errors.New(common.ERROR_BASE64_DATA)
         return
     }
 
@@ -204,24 +154,9 @@ func (up *Uploader) UpBase64(fileName, base64data string) (fileInfo *ResFileInfo
 
     fullName := up.getFullName(fileName)
     fileAbsPath := up.getFilePath(fullName)
-    fileDir  := filepath.Dir(fileAbsPath)
-    exists, err := pathExists(fileDir)
-    if err != nil {
-        err = errors.New(ERROR_FILE_STATE)
-        return
-    }
 
-    if !exists {
-        // 文件夹不存在，创建
-        if err = os.MkdirAll(fileDir, 0766); err != nil {
-            err = errors.New(ERROR_CREATE_DIR)
-            return
-        }
-    }
-
-    err = ioutil.WriteFile(fileAbsPath, imgData, 0666)
+    fileUrl, err := up.Storage.SaveData(imgData, fileAbsPath, fullName)
     if err != nil {
-        err = errors.New(ERROR_WRITE_CONTENT)
         return
     }
 
@@ -230,7 +165,7 @@ func (up *Uploader) UpBase64(fileName, base64data string) (fileInfo *ResFileInfo
     fileInfo.Type = ext
     fileInfo.Title = filepath.Base(fileAbsPath)
     fileInfo.Original = up.params.OriName
-    fileInfo.URL = fullName
+    fileInfo.URL = fileUrl
 
     return
 }
@@ -241,13 +176,13 @@ func (up *Uploader) UpBase64(fileName, base64data string) (fileInfo *ResFileInfo
 func (up *Uploader) SaveRemote(remoteUrl string) (fileInfo *ResFileInfo, err error) {
     urlObj, err := url.Parse(remoteUrl)
     if err != nil {
-        err = errors.New(INVALID_URL)
+        err = errors.New(common.INVALID_URL)
         return
     }
 
     scheme := strings.ToLower(urlObj.Scheme)
     if scheme != "http" && scheme != "https" {
-        err = errors.New(ERROR_HTTP_LINK)
+        err = errors.New(common.ERROR_HTTP_LINK)
         return
     }
 
@@ -261,20 +196,6 @@ func (up *Uploader) SaveRemote(remoteUrl string) (fileInfo *ResFileInfo, err err
     fileName := filepath.Base(urlObj.Path)
     fullName := up.getFullName(fileName)
     fileAbsPath := up.getFilePath(fullName)
-    fileDir  := filepath.Dir(fileAbsPath)
-    exists, err := pathExists(fileDir)
-    if err != nil {
-        err = errors.New(ERROR_FILE_STATE)
-        return
-    }
-
-    if !exists {
-        // 文件夹不存在，创建
-        if err = os.MkdirAll(fileDir, 0766); err != nil {
-            err = errors.New(ERROR_CREATE_DIR)
-            return
-        }
-    }
 
     client := http.Client{Timeout: 5 * time.Second}
     // 校验是否是可用的链接
@@ -285,13 +206,13 @@ func (up *Uploader) SaveRemote(remoteUrl string) (fileInfo *ResFileInfo, err err
         }()
     }
     if err != nil || headResp.StatusCode != http.StatusOK {
-        err = errors.New(ERROR_DEAD_LINK)
+        err = errors.New(common.ERROR_DEAD_LINK)
         return
     }
     // 校验content-type
     contentType := headResp.Header.Get("Content-Type")
     if !strings.Contains(strings.ToLower(contentType), "image") {
-        err = errors.New(ERROR_HTTP_CONTENTTYPE)
+        err = errors.New(common.ERROR_HTTP_CONTENTTYPE)
         return
     }
 
@@ -302,27 +223,24 @@ func (up *Uploader) SaveRemote(remoteUrl string) (fileInfo *ResFileInfo, err err
         }()
     }
     if err != nil || resp.StatusCode != http.StatusOK {
-        err = errors.New(ERROR_DEAD_LINK)
+        err = errors.New(common.ERROR_DEAD_LINK)
         return
     }
 
     data, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        errors.New(ERRPR_READ_REMOTE_DATA)
+        errors.New(common.ERRPR_READ_REMOTE_DATA)
         return
     }
 
-    err = ioutil.WriteFile(fileAbsPath, data, 0666)
-    if err != nil {
-        err = errors.New(ERROR_WRITE_CONTENT)
-        return
-    }
+    fileUrl, err :=  up.Storage.SaveData(data, fileAbsPath, fullName)
+
     fileInfo = &ResFileInfo{}
     fileInfo.Size = int64(len(data))
     fileInfo.Type = ext
     fileInfo.Title = filepath.Base(fileAbsPath)
     fileInfo.Original = fileName
-    fileInfo.URL = fullName
+    fileInfo.URL = fileUrl
 
     return
 }
@@ -377,7 +295,7 @@ func (up *Uploader) getFilePath(fullName string) string  {
  */
 func (up *Uploader) checkSize(fileSize int64) (err error) {
     if fileSize > int64(up.params.MaxSize) {
-        err = errors.New(ERROR_SIZE_EXCEED)
+        err = errors.New(common.ERROR_SIZE_EXCEED)
         return
     }
     return
@@ -396,10 +314,18 @@ func (up *Uploader) checkType(fileType string) (err error)  {
     }
 
     if !isvalid {
-        err = errors.New(ERROR_TYPE_NOT_ALLOWED)
+        err = errors.New(common.ERROR_TYPE_NOT_ALLOWED)
         return
     }
 
+    return
+}
+
+/**
+设置文件存储对象
+ */
+func (up *Uploader) SetStorage(storageObj storage.BaseInterface) (err error)  {
+    up.Storage = storageObj
     return
 }
 

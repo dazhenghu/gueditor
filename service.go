@@ -3,6 +3,7 @@ package gueditor
 import (
     "net/http"
     "errors"
+    "github.com/dazhenghu/gueditor/storage"
 )
 
 const (
@@ -38,6 +39,32 @@ func NewService(uploaderObj UploaderInterface, listObj ListInterface, rootPath s
         err = loadConfigFromFile(configFilePath)
     }
 
+    return
+}
+
+/**
+创建service，并制定存储实例
+ */
+func NewServiceWithStorageObj(storageObj storage.BaseInterface, rootPath string, configFilePath string) (serv *Service, err error) {
+
+    uploaderObj := &Uploader{}
+
+    if storageObj != nil {
+        uploaderObj.SetStorage(storageObj)
+    } else {
+        // 如果没有设置存储服务，则默认使用本地文件形式保存
+        uploaderObj.SetStorage(&storage.LocalFile{})
+    }
+
+    serv = &Service{
+        rootPath:rootPath,
+        uploader:uploaderObj,
+    }
+
+    if configFilePath != "" {
+        // 加载默认配置
+        err = loadConfigFromFile(configFilePath)
+    }
     return
 }
 
