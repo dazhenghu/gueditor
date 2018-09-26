@@ -16,15 +16,17 @@ type QiniuConfig struct {
     SecretKey     string
     Bucket        string
     PolicyExpires uint32              // 上传凭证的有效时间，单位秒
-    Zone          *qiniu_storage.Zone //空间所在的机房
-    UseHTTPS      bool                //是否使用https域名
-    UseCdnDomains bool                //是否使用cdn加速域名
-    CentralRsHost string              //中心机房的RsHost，用于list bucket
+    Zone          *qiniu_storage.Zone // 空间所在的机房
+    UseHTTPS      bool                // 是否使用https域名
+    UseCdnDomains bool                // 是否使用cdn加速域名
+    CentralRsHost string              // 中心机房的RsHost，用于list bucket
+    Domain        string              // 外链域名
 }
 
 type Qiniu struct {
     BaseInterface
-    upToken string
+    upToken string // token
+    config *QiniuConfig // 配置信息
 }
 
 type QiniuRet struct {
@@ -48,9 +50,14 @@ func NewQiniu(config *QiniuConfig) (*Qiniu) {
 
     mac := qbox.NewMac(config.AccessKey, config.SecretKey)
     qiniuObj.upToken = putPolicy.UploadToken(mac)
+
+    qiniuObj.config = config
     return qiniuObj
 }
 
+/**
+从本地文件保存
+ */
 func (qn *Qiniu) SaveFileFromLocalPath(srcPath string, dstAbsPath, dstRelativePath string) (url string, err error) {
     cfg := qiniu_storage.Config{}
     formUploader := qiniu_storage.NewFormUploader(&cfg)
@@ -77,8 +84,8 @@ func (qn *Qiniu) SaveFile(srcFile io.Reader, srcFileSize int64, dstAbsPath, dstR
 
     err = formUploader.Put(context.Background(), &ret, qn.upToken, dstRelativePath, srcFile, srcFileSize, &putExtra)
 
-    url = ret.Key
-
+    // 生成外链
+    url = qiniu_storage.MakePublicURL(qn.config.Domain, ret.Key)
     return
 }
 
@@ -92,6 +99,7 @@ func (qn *Qiniu) SaveData(data []byte, dstAbsPath, dstRelativePath string) (url 
     dataBuffer := bytes.NewBuffer(data)
 
     err = formUploader.Put(context.Background(), ret, qn.upToken, dstRelativePath, dataBuffer, int64(dataBuffer.Len()), &putExtra)
-    url = ret.Key
+
+    url = qiniu_storage.MakePublicURL(qn.config.Domain, ret.Key)
     return
 }
