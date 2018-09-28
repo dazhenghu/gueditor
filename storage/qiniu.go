@@ -25,7 +25,7 @@ type QiniuConfig struct {
 
 type Qiniu struct {
     BaseInterface
-    upToken string // token
+    putPolicy *qiniu_storage.PutPolicy // 上传策略
     config *QiniuConfig // 配置信息
 }
 
@@ -39,7 +39,7 @@ type QiniuRet struct {
 func NewQiniu(config *QiniuConfig) (*Qiniu) {
     qiniuObj := &Qiniu{}
 
-    putPolicy := qiniu_storage.PutPolicy{
+    putPolicy := &qiniu_storage.PutPolicy{
         Scope: config.Bucket,
         ReturnBody: `{"key":"$(key)","hash":"$(etag)","fsize":$(fsize),"bucket":"$(bucket)"}`,
     }
@@ -48,9 +48,7 @@ func NewQiniu(config *QiniuConfig) (*Qiniu) {
         putPolicy.Expires = config.PolicyExpires
     }
 
-    mac := qbox.NewMac(config.AccessKey, config.SecretKey)
-    qiniuObj.upToken = putPolicy.UploadToken(mac)
-
+    qiniuObj.putPolicy = putPolicy
     qiniuObj.config = config
     return qiniuObj
 }
@@ -67,7 +65,8 @@ func (qn *Qiniu) SaveFileFromLocalPath(srcPath string, dstAbsPath, dstRelativePa
 
     key := encryptutil.Md5(fmt.Sprintf("%d_%s", time.Now().Unix(), dstRelativePath))
 
-    err = formUploader.PutFile(context.Background(), &ret, qn.upToken, key, srcPath, &putExtra)
+    // 按照官方文档建议，每次上传都重新请求一次上传token
+    err = formUploader.PutFile(context.Background(), &ret, qn.getUpToken(), key, srcPath, &putExtra)
     if err != nil {
         return
     }
@@ -82,7 +81,7 @@ func (qn *Qiniu) SaveFile(srcFile io.Reader, srcFileSize int64, dstAbsPath, dstR
     ret := QiniuRet{}
     putExtra := qiniu_storage.PutExtra{}
 
-    err = formUploader.Put(context.Background(), &ret, qn.upToken, dstRelativePath, srcFile, srcFileSize, &putExtra)
+    err = formUploader.Put(context.Background(), &ret, qn.getUpToken(), dstRelativePath, srcFile, srcFileSize, &putExtra)
 
     // 生成外链
     url = qiniu_storage.MakePublicURL(qn.config.Domain, ret.Key)
@@ -98,8 +97,16 @@ func (qn *Qiniu) SaveData(data []byte, dstAbsPath, dstRelativePath string) (url 
 
     dataBuffer := bytes.NewBuffer(data)
 
-    err = formUploader.Put(context.Background(), ret, qn.upToken, dstRelativePath, dataBuffer, int64(dataBuffer.Len()), &putExtra)
+    err = formUploader.Put(context.Background(), ret, qn.getUpToken(), dstRelativePath, dataBuffer, int64(dataBuffer.Len()), &putExtra)
 
     url = qiniu_storage.MakePublicURL(qn.config.Domain, ret.Key)
     return
+}
+
+/**
+获取上传请求token
+ */
+func (qn *Qiniu) getUpToken() string {
+    mac := qbox.NewMac(qn.config.AccessKey, qn.config.SecretKey)
+    return qn.putPolicy.UploadToken(mac)
 }
